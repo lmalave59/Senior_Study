@@ -16,7 +16,25 @@ Participants will complete an anonymous Google Form survey that includes:
 
 Recruitment will include as many participants as possible, targeting both CS majors and student-athletes to allow cross-group comparisons. No identifying information will be collected, ensuring full anonymity.
 
-Author
+**Expected Outcomes**
+
+The project aims to:
+
+Quantify how common impostor feelings are among CS students and athletes
+
+Identify key contributors (e.g., perfectionism, academic stress, social comparison)
+
+Provide data-driven insights that support mental wellness and mentorship initiatives within university programs
+
+Findings will be summarized in charts, short reflections, and a research paper submitted for the CSC 450 Senior Research course.
+
+**Tools and Technologies**
+
+Google Forms for survey distribution
+
+Excel & Python for data organization and visualization
+
+**Author**
 
 Lucas Malave
 Eastern Connecticut State University — CSC 450: Senior Research
