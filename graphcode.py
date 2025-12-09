@@ -8,7 +8,6 @@ Original file is located at
 """
 
 # Lucas Malave — CSC-450 Final Figures (6 total) — 100% working version
-# Paste this whole thing into a fresh Google Colab notebook and run
 
 import pandas as pd
 import matplotlib.pyplot as plt
