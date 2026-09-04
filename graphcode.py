@@ -7,10 +7,11 @@ Scores 20-item Clance Impostor Phenomenon Scale (CIPS) responses, compares
 CS students against student-athletes, and generates six figures.
 
 Usage:  python graphcode.py
-Output: figures/ directory
+Output: figures/
 """
 
 import os
+import re
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -18,12 +19,16 @@ import seaborn as sns
 import numpy as np
 from scipy import stats
 
-DATA_PATH = os.path.join("data", "responses.csv")
+DATA_PATH = "responses.csv"
 FIGURE_DIR = "figures"
 
 # CIPS severity thresholds (Clance, 1985)
 SEVERITY_BINS = [0, 40, 60, 80, 100]
 SEVERITY_LABELS = ["Few", "Moderate", "Frequent", "Intense"]
+
+# Column holding the scores totalled by hand in the spreadsheet, used only
+# to verify this script reproduces them. Not required for the analysis.
+CHECK_COL = "Column 1"
 
 os.makedirs(FIGURE_DIR, exist_ok=True)
 
@@ -35,20 +40,37 @@ def save(fig_name):
     plt.close()
 
 
-# ---------- Load and prepare ----------
+# ---------- Load ----------
 df = pd.read_csv(DATA_PATH)
 
-# The 20 CIPS items are stored in columns named "1." through "20."
-q_cols = [col for col in df.columns if str(col).replace(".", "").isdigit()]
+# The 20 CIPS items are matched on their leading item number, so this works
+# whether the Google Form export carries the full question text as the header
+# or an abbreviated "1." through "20.".
+q_cols = sorted(
+    [c for c in df.columns if re.match(r"^\s*\d{1,2}\.", str(c))],
+    key=lambda c: int(re.match(r"^\s*(\d{1,2})\.", str(c)).group(1)),
+)
+if len(q_cols) != 20:
+    raise ValueError(f"Expected 20 CIPS items, matched {len(q_cols)}: {q_cols}")
+
 df["IP_Score"] = df[q_cols].sum(axis=1)
 
+# Confirm the computed totals agree with the ones totalled in the spreadsheet.
+if CHECK_COL in df.columns:
+    mismatches = (df["IP_Score"] != pd.to_numeric(df[CHECK_COL], errors="coerce")).sum()
+    if mismatches:
+        raise ValueError(f"{mismatches} scored rows disagree with '{CHECK_COL}'")
+
+# Major names arrive with inconsistent trailing spaces ("Health Science " vs
+# "Health Science"), so normalise before grouping.
+df["Major"] = df["Major field of study"].str.strip()
 df["Group"] = np.where(
-    df["Major field of study"].str.contains("Computer Science", case=False),
+    df["Major"].str.contains("Computer Science", case=False),
     "CS Seniors",
     "Baseball Athletes",
 )
 
-# Some GPA entries arrive as "NA" or "N/A"; coerce to NaN rather than failing
+# Some GPA entries can arrive as "NA" or "N/A"; coerce rather than fail.
 df["GPA"] = pd.to_numeric(df["Overall GPA"], errors="coerce")
 
 df["Severity"] = pd.cut(
@@ -86,22 +108,19 @@ plt.ylabel("Total IP Score")
 save("Figure2_Scatter.png")
 
 # ---------- Figure 3: group means ----------
-# Welch's t-test (equal_var=False) because the two groups differ in size
-# and cannot be assumed to share a variance.
+# Welch's t-test (equal_var=False) because the two groups cannot be assumed
+# to share a variance.
 means = df.groupby("Group")["IP_Score"].mean()
 stds = df.groupby("Group")["IP_Score"].std()
+order = ["Baseball Athletes", "CS Seniors"]
 tstat, pval = stats.ttest_ind(
     df[df["Group"] == "CS Seniors"]["IP_Score"],
     df[df["Group"] == "Baseball Athletes"]["IP_Score"],
     equal_var=False,
 )
 plt.figure(figsize=(8, 6))
-plt.bar(
-    ["Baseball Athletes", "CS Seniors"],
-    [means["Baseball Athletes"], means["CS Seniors"]],
-    yerr=[stds["Baseball Athletes"], stds["CS Seniors"]],
-    capsize=10, color=["#3498db", "#e67e22"],
-)
+plt.bar(order, [means[g] for g in order], yerr=[stds[g] for g in order],
+        capsize=10, color=["#3498db", "#e67e22"])
 plt.title(
     f"Figure 3. Mean IP Score by Group\nt = {tstat:.2f}, p = {pval:.3f}",
     fontsize=14, fontweight="bold",
@@ -131,6 +150,9 @@ save("Figure5_Severity.png")
 means_q = df.groupby("Group")[q_cols].mean()
 diff = means_q.loc["CS Seniors"] - means_q.loc["Baseball Athletes"]
 top_diff = diff[diff.abs().nlargest(5).index]
+# Long question text is trimmed to the item number for a readable axis.
+top_diff.index = [re.match(r"^\s*(\d{1,2})\.", str(c)).group(1) for c in top_diff.index]
+top_diff.index = ["Item " + i for i in top_diff.index]
 plt.figure(figsize=(10, 6))
 top_diff.sort_values().plot(kind="barh", color="#e74c3c", alpha=0.8)
 plt.title("Figure 6. Top 5 Items Separating CS Students from Athletes",
@@ -141,5 +163,7 @@ for i, (q, v) in enumerate(top_diff.sort_values().items()):
              va="center", fontweight="bold")
 save("Figure6_TopQuestions.png")
 
-print(f"Analyzed {n_total} responses ({n_gpa} with usable GPA).")
+n_cs = int((df["Group"] == "CS Seniors").sum())
+print(f"Analyzed {n_total} responses ({n_cs} CS, {n_total - n_cs} athletes; "
+      f"{n_gpa} with usable GPA).")
 print(f"Six figures written to ./{FIGURE_DIR}/")
